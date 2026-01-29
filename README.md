@@ -1,3 +1,5 @@
-# Code for Language Models Optimized to Fool Detectors Still Have a Distinct Style (And How to Change It)
+# Code for "Attacks on Machine-Text Detectors Retain Stylistic Fingerprints"
 
 Coming soon!
+
+If you're a reviewer, the code was provided in the supplemental material. 
