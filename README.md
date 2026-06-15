@@ -2,7 +2,7 @@
 
 Official code, model, and author bank accompanying
 
-> *Attacks on Machine-Text Detectors Retain Stylistic Fingerprints* (ICML).
+> [*Attacks on Machine-Text Detectors Retain Stylistic Fingerprints*](https://arxiv.org/pdf/2505.14608v3) (ICML).
 
 This release contains everything needed to (a) run our style-aware paraphrasing
 attack on novel machine-generated text, (b) reproduce the held-out evaluations
