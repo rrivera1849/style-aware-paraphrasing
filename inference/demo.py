@@ -104,10 +104,12 @@ def main():
         num_iters=args.num_iters,
     )
 
+    import textwrap
     print()
     print("Final iteration outputs (top 5 by SBERT vs. original):")
     for i, s in enumerate(iters[-1]):
-        print(f"  [{i}] {s[:300]}")
+        print(textwrap.fill(s, width=88, initial_indent=f"  [{i}] ",
+                            subsequent_indent="      "))
 
 
 if __name__ == "__main__":

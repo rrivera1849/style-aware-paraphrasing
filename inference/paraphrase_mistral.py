@@ -35,19 +35,48 @@ def paraphrase_p5(
     """Return `num_paraphrases` Mistral-7B paraphrases of `text`.
 
     Pass an already-loaded `vllm.LLM` instance via `llm` to avoid the multi-minute
-    cold start when calling repeatedly.
+    cold start when calling repeatedly. For many inputs, use `paraphrase_p5_batch`
+    instead — it submits all prompts in a single vLLM call.
+    """
+    return paraphrase_p5_batch(
+        [text], llm=llm, num_paraphrases=num_paraphrases,
+        temperature=temperature, top_p=top_p, max_tokens=max_tokens,
+        model_id=model_id,
+    )[0]
+
+
+def paraphrase_p5_batch(
+    texts: List[str],
+    llm: LLM = None,
+    num_paraphrases: int = 5,
+    temperature: float = 0.7,
+    top_p: float = 0.9,
+    max_tokens: int = 256,
+    model_id: str = MISTRAL_MODEL_ID,
+) -> List[List[str]]:
+    """Batched paraphrasing: returns `num_paraphrases` Mistral-7B paraphrases
+    for each input text in a single vLLM call.
+
+    Args:
+        texts: length-N list of inputs to paraphrase.
+        llm: optional pre-loaded vLLM instance of Mistral-7B-Instruct-v0.3.
+
+    Returns:
+        Length-N list. Element i is the `num_paraphrases` paraphrases of
+        `texts[i]`. vLLM occasionally emits duplicates; outputs are NOT
+        deduplicated here — the calling layer can `list(set(...))` if needed.
     """
     if llm is None:
         llm = LLM(model_id, gpu_memory_utilization=0.90)
-
     sp = SamplingParams(
         n=num_paraphrases,
         temperature=temperature,
         top_p=top_p,
         max_tokens=max_tokens,
     )
-    [out] = llm.generate([PARAPHRASE_PROMPT.format(passage=text)], sp)
-    return [o.text.strip() for o in out.outputs]
+    prompts = [PARAPHRASE_PROMPT.format(passage=t) for t in texts]
+    raw = llm.generate(prompts, sp)
+    return [[o.text.strip() for o in out.outputs] for out in raw]
 
 
 if __name__ == "__main__":

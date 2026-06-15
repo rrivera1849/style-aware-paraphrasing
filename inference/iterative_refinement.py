@@ -19,6 +19,7 @@ inputs work best when split into paragraphs and paraphrased independently
 (Appendix L, "Chunk & Merge").
 """
 
+import html
 import os
 import random; random.seed(43)
 from typing import List, Optional, Sequence
@@ -167,9 +168,11 @@ def iterative_refine(
             target_paraphrases=[[list(tp) for tp in target_paraphrases]],
         )
         raw = llm.generate(prompts, sampling)
-        # vLLM may emit duplicates; dedupe.
+        # vLLM may emit duplicates; dedupe. html.unescape decodes Reddit-
+        # encoded entities (`&gt;`, `&amp;`, etc.) that the training data
+        # carried through.
         [generation] = raw
-        candidates = list({o.text.strip() for o in generation.outputs})
+        candidates = list({html.unescape(o.text.strip()) for o in generation.outputs})
         # Rerank against the *original* machine text — never against the
         # previous iteration's outputs, which would let semantics drift.
         top = _topk_by_sbert(
@@ -179,6 +182,108 @@ def iterative_refine(
         sources = top  # next iter conditions on the surviving picks
 
     return iteration_outputs
+
+
+def iterative_refine_batch(
+    initial_paraphrases_list: Sequence[Sequence[str]],
+    target_texts_list: Sequence[Sequence[str]],
+    target_paraphrases_list: Sequence[Sequence[Sequence[str]]],
+    original_texts: Sequence[str],
+    *,
+    llm: Optional[LLM] = None,
+    sbert=None,
+    model_path: Optional[str] = None,
+    num_iters: int = DEFAULT_NUM_ITERS,
+    num_candidates: int = DEFAULT_NUM_CANDIDATES,
+    num_kept: int = DEFAULT_NUM_KEPT,
+    temperature: float = DEFAULT_TEMPERATURE,
+    top_p: float = DEFAULT_TOP_P,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    gpu_memory_utilization: float = 0.90,
+    max_model_len: int = 15_000,
+) -> List[List[List[str]]]:
+    """Batched style-aware refinement: N inputs in lockstep through num_iters rounds.
+
+    Each iteration submits N prompts to vLLM in a single generate() call,
+    so the model gets to schedule them together (continuous batching, shared
+    KV cache for the in-context exemplar prefix when present, etc.). This is
+    the right entry point when you have many machine texts to disguise.
+
+    Args:
+        initial_paraphrases_list: length-N. Element i is the P=5 Mistral-7B
+            paraphrases of the i-th machine text.
+        target_texts_list: length-N. Element i is the M=16 exemplar comments
+            of the i-th target author.
+        target_paraphrases_list: length-N. Element i is the M=16 lists of
+            P=5 Mistral-7B paraphrases of those exemplars.
+        original_texts: length-N. Element i is the i-th machine text — the
+            SBERT rerank reference for that input's candidates.
+
+    Returns:
+        A list of length N. Element i is `iterative_refine(...)`'s return
+        for input i — a list of length `num_iters` of `num_kept`-string lists.
+        `result[i][-1]` is input i's final iteration's top picks.
+
+    Notes:
+        Memory rough cut: vLLM holds all N prompts' KV cache during a
+        generate() call. The released model's prompts run ~6k tokens each;
+        on an 80 GB A100 you can typically fit ~50 in one batch. Chunk the
+        input list yourself if you have more, calling this function once
+        per chunk and stitching the results.
+    """
+    n = len(initial_paraphrases_list)
+    assert len(target_texts_list) == n, (
+        f"target_texts_list ({len(target_texts_list)}) != initial ({n})"
+    )
+    assert len(target_paraphrases_list) == n
+    assert len(original_texts) == n
+
+    if llm is None:
+        if model_path is None:
+            model_path = MODEL_PATH
+        llm = LLM(
+            model_path,
+            gpu_memory_utilization=gpu_memory_utilization,
+            max_model_len=max_model_len,
+        )
+    if sbert is None:
+        sbert = load_sbert_model()
+        if torch.cuda.is_available():
+            sbert = sbert.cuda()
+
+    sampling = SamplingParams(
+        n=num_candidates,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        stop="\n#####\n",
+    )
+
+    sources_per_input: List[List[str]] = [list(p) for p in initial_paraphrases_list]
+    per_iter_outputs: List[List[List[str]]] = [[] for _ in range(n)]
+    original_texts = list(original_texts)
+
+    for _ in range(num_iters):
+        prompts = build_style_transfer_prompts(
+            source_paraphrases=sources_per_input,
+            target_texts=[list(t) for t in target_texts_list],
+            target_paraphrases=[[list(tp) for tp in row] for row in target_paraphrases_list],
+        )
+        raw = llm.generate(prompts, sampling)
+        # Per-input dedupe + HTML-entity decode (Reddit training data was
+        # HTML-encoded, so `&gt;` etc. leak through if we don't unescape).
+        candidates_per_input = [
+            list({html.unescape(o.text.strip()) for o in g.outputs}) for g in raw
+        ]
+        # SBERT rerank: each input's candidates against its own original text.
+        topk = _topk_by_sbert(
+            candidates_per_input, original_texts, sbert, k=num_kept,
+        )
+        for i, picks in enumerate(topk):
+            per_iter_outputs[i].append(picks)
+        sources_per_input = topk  # next iter conditions on surviving picks
+
+    return per_iter_outputs
 
 def choose_best_content(
     df: pd.DataFrame,

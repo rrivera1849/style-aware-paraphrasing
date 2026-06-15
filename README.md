@@ -39,7 +39,9 @@ Two-stage attack: paraphrase the input with Mistral-7B-Instruct-v0.3,
 then iteratively rewrite each paraphrase in a target author's style with
 our DPO-tuned model. Both `inference/demo.ipynb` (notebook) and
 `inference/demo.py` (CLI: `python inference/demo.py --machine_text "..."`)
-load the two LLMs sequentially so a single 80 GB A100 is enough.
+load the two LLMs sequentially so a single 80 GB A100 is enough. For many
+inputs at once, see `inference/batch_demo.py` and the batched library
+functions `paraphrase_p5_batch` + `iterative_refine_batch`.
 
 ```python
 from datasets import load_dataset
