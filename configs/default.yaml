@@ -1,0 +1,48 @@
+# Default paths for the public release.
+# Override any of these via env vars or by editing this file.
+
+paths:
+  # The released model. Defaults to the HF Hub repo; override via env var
+  # to point at a local snapshot.
+  model: ${oc.env:STYLE_AWARE_MODEL_PATH,rrivera1849/style-aware-paraphraser-mistral7b}
+
+  # The author bank. Defaults to the HF Hub repo.
+  author_bank: ${oc.env:STYLE_AWARE_AUTHOR_BANK,rrivera1849/style-aware-paraphraser-author-bank-reddit}
+
+  # Output dir for training runs (SFT / DPO checkpoints, merged models).
+  output: ${oc.env:STYLE_AWARE_OUTPUT,./outputs}
+
+  # Cache dir for raw data used by training/01_prepare_data.sh.
+  data: ${oc.env:STYLE_AWARE_DATA,./data}
+
+models:
+  base: mistralai/Mistral-7B-Instruct-v0.3
+  paraphraser: mistralai/Mistral-7B-Instruct-v0.3
+  sbert: sentence-transformers/all-mpnet-base-v2
+  luar: rrivera1849/LUAR-MUD
+  cisr: AnnaWegmann/Style-Embedding
+  styledistance: StyleDistance/styledistance
+
+inference:
+  num_paraphrases: 5            # P, paragraph H.1
+  num_candidates_per_iter: 10   # P=10 in iterative_refinement.py
+  num_kept_per_iter: 5          # top-5 by SBERT
+  num_iterations: 3             # 3 rounds in paper §4
+  temperature: 0.6
+  top_p: 1.0
+  max_new_tokens: 192
+
+training:
+  sft:
+    lora_r: 32
+    lora_alpha: 64
+    lora_dropout: 0.1
+    learning_rate: 2.0e-5
+    num_epochs: 1
+    per_device_batch_size: 8
+  dpo:
+    beta: 5.0
+    learning_rate: 1.0e-6
+    max_prompt_length: 2944     # 3072 - 128 completion budget
+    per_device_batch_size: 1
+    num_epochs: 3
