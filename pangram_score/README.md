@@ -29,8 +29,6 @@ python run_pangram_eval.py --debug
 python run_pangram_eval.py
 ```
 
-Useful flags: `--limit N`, `--api-key ...`, `--threshold 0.5`, `--no-cache`.
-
 ## Outputs (written here)
 
 - `pangram_scores_{debug,full}.json` — raw per-text scores + the texts scored.
