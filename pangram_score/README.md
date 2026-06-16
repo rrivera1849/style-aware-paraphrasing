@@ -34,7 +34,7 @@ Useful flags: `--limit N`, `--api-key ...`, `--threshold 0.5`, `--no-cache`.
 ## Outputs (written here)
 
 - `pangram_scores_{debug,full}.json` — raw per-text scores + the texts scored.
-- `pangram_results_{debug,full}.md` — AUROC, pAUROC(1%), group means.
+- `pangram_results_{debug,full}.md` — AUROC, group means.
 - `score_cache.json` — per-text score cache (keyed by SHA-256), so re-runs and
   crash-recovery don't re-bill the API. Delete it to force a clean re-score.
 
